@@ -1,0 +1,11 @@
+[package]
+name = "howto"
+version = "0.1.0"
+authors = ["pbzweihander <sd852456@naver.com>"]
+license = "MIT"
+description = "instant coding answers via the command line"
+repository = "https://github.com/pbzweihander/howto"
+keywords = ["cli", "search"]
+
+[dependencies]
+scraper = "0.7"
