@@ -9,3 +9,7 @@ keywords = ["cli", "search"]
 
 [dependencies]
 scraper = "0.7"
+failure = "0.1"
+lazy_static = "1.1"
+hyper = "0.12"
+futures = "0.1"
