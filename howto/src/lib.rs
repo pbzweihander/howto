@@ -4,6 +4,7 @@ extern crate lazy_static;
 extern crate futures;
 extern crate hyper;
 extern crate scraper;
+extern crate slugify;
 
 pub use failure::Error;
 
@@ -11,6 +12,7 @@ use futures::stream::futures_ordered;
 use futures::{Future, Stream};
 use hyper::{Body, Client, Request};
 use scraper::{Html, Selector};
+use slugify::slugify;
 
 #[derive(Debug, Clone)]
 pub struct Answer {
@@ -66,7 +68,7 @@ fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error
     }
 
     let url = format!(
-        "https://www.google.com/search?q=site:stackoverflow.com%20{}",
+        "http://www.google.com/search?q=site:stackoverflow.com%20{}",
         query
     );
 
@@ -119,7 +121,7 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
 }
 
 pub fn howto(query: &str) -> Answers {
-    let query = query.replace("?", "");
+    let query = slugify!(query, separator = "+");
 
     let links_future = get_stackoverflow_links(&query);
 
