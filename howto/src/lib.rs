@@ -1,3 +1,18 @@
+//! # howto
+//!
+//! Instant coding answers with Google and StackOverflow.
+//! Inspired by [gleitz/howdoi](https://github.com/gleitz/howdoi).
+//!
+//! ## Usage
+//!
+//! ```
+//! let answers = howto::howto("file io rust");
+//!
+//! for answer in answers.filter_map(Result::ok) {
+//!     println!("Answer from {}\n{}", answer.link, answer.instruction);
+//! }
+//! ```
+
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
@@ -20,6 +35,7 @@ use slugify::slugify;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 
+/// Struct containing the answer of given query.
 #[derive(Debug, Clone)]
 pub struct Answer {
     pub link: String,
@@ -27,6 +43,7 @@ pub struct Answer {
     pub instruction: String,
 }
 
+/// Blocking iterator that gets answers from Stream.
 pub struct Answers {
     inner: Receiver<Result<Answer, Error>>,
 }
@@ -127,6 +144,7 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
         }).map_err(move |e| e.context(format!("error in link {}", link1)).into())
 }
 
+/// Query function. Give query to this fuction ans thats it. Google and StackOverflow do the rest.
 pub fn howto(query: &str) -> Answers {
     let query = slugify!(query, separator = "+");
     let (sender, receiver) = channel::<Result<Answer, Error>>();
@@ -152,4 +170,14 @@ pub fn howto(query: &str) -> Answers {
     });
 
     Answers { inner: receiver }
+}
+
+#[test]
+fn simple_test() {
+    let answers = howto("file io rust");
+
+    for answer in answers {
+        let answer = answer.unwrap();
+        println!("Answer from: {}\n{}", answer.link, answer.instruction);
+    }
 }
