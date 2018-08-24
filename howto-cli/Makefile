@@ -1,4 +1,5 @@
 NAME=howto
+CRATE_NAME=howto-cli
 BIN_NAME=howto
 VERSION=$(shell git rev-parse HEAD)
 SEMVER_VERSION=$(shell grep version Cargo.toml | awk -F"\"" '{print $$2}' | head -n 1)
@@ -34,7 +35,7 @@ tag-semver: docker-build
 	fi
 
 cargo-publish:
-	if curl -sSL https://crates.io/api/v1/crates/$(NAME)/versions | jq -r ".versions | .[].num" | grep -q $(SEMVER_VERSION); then \
+	if curl -sSL https://crates.io/api/v1/crates/$(CRATE_NAME)/versions | jq -r ".versions | .[].num" | grep -q $(SEMVER_VERSION); then \
 		echo "Tag $(SEMVER_VERSION) already exists - not publishing" ; \
 	else \
 		cargo publish ; \
