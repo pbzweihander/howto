@@ -7,17 +7,11 @@ use howto::*;
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
-enum ShowOption {
-    CodeOnly,
-    LinkOnly,
-    FullText,
-}
-
-#[derive(Debug)]
 struct Config {
     query: String,
     position: usize,
-    show_option: ShowOption,
+    show_link: bool,
+    show_full: bool,
     num_answers: usize,
 }
 
@@ -89,17 +83,15 @@ fn get_config_from_args(args: Vec<String>) -> Result<Config, String> {
     let num_answers = get_opt_or_default!("num-answers", 1);
     ensure!(num_answers >= 1);
 
-    let show_option = match (matches.opt_present("link"), matches.opt_present("all")) {
-        (false, false) => ShowOption::CodeOnly,
-        (true, false) => ShowOption::LinkOnly,
-        (false, true) => ShowOption::FullText,
-        (true, true) => bail!(),
-    };
+    let show_link = matches.opt_present("link");
+    let show_full = matches.opt_present("all");
+    ensure!(!(show_link && show_full));
 
     Ok(Config {
         query,
         position,
-        show_option,
+        show_link,
+        show_full,
         num_answers,
     })
 }
@@ -119,20 +111,19 @@ fn main() {
         .take(config.num_answers)
         .for_each(|answer| match answer {
             Err(e) => eprintln!("{}", e),
-            Ok(answer) => match config.show_option {
-                ShowOption::CodeOnly => {
+            Ok(answer) => {
+                if config.show_link {
+                    println!("{}", answer.link);
+                } else {
                     if config.num_answers > 1 {
-                        println!("=== Answers from {} ===", answer.link);
+                        println!("==== Answers from {} ====", answer.link);
                     }
-                    println!("{}\n", answer.instruction);
-                }
-                ShowOption::LinkOnly => println!("{}", answer.link),
-                ShowOption::FullText => {
-                    if config.num_answers > 1 {
-                        println!("=== Answers from {} ===", answer.link);
+                    if config.show_full {
+                        println!("{}\n", answer.full_text);
+                    } else {
+                        println!("{}", answer.instruction);
                     }
-                    println!("{}\n", answer.full_text);
                 }
-            },
+            }
         });
 }
