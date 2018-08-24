@@ -8,7 +8,7 @@ repository = "https://github.com/pbzweihander/howto"
 keywords = ["cli", "search"]
 
 [dependencies]
-howto = { version = "*", path = "../howto" }
+howto = "0.1"
 getopts = "0.2"
 
 [[bin]]

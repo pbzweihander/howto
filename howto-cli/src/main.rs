@@ -99,7 +99,7 @@ fn get_config_from_args(args: Vec<String>) -> Result<Config, String> {
 fn main() {
     let config = get_config_from_args(std::env::args().collect::<Vec<_>>());
     if let Err(e) = config {
-        eprintln!("{}", e);
+        println!("{}", e);
         return;
     }
     let config = config.unwrap();

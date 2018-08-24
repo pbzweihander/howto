@@ -261,6 +261,7 @@ dependencies = [
 [[package]]
 name = "howto"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.23 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -277,7 +278,7 @@ name = "howto-cli"
 version = "0.1.0"
 dependencies = [
  "getopts 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "howto 0.1.0",
+ "howto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1169,6 +1170,7 @@ dependencies = [
 "checksum futures-cpupool 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)" = "ab90cde24b3319636588d0c35fe03b1333857621051837ed769faefb4c2162e4"
 "checksum getopts 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)" = "0a7292d30132fb5424b354f5dc02512a86e4c516fe544bb7a25e7f266951b797"
 "checksum h2 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)" = "a27e7ed946e8335bdf9a191bc1b9b14a03ba822d013d2f58437f4fabcbd7fc2c"
+"checksum howto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5764cc0c98ccd5c5c14aca8add27c1604652c8aced03cca0999ca89c300c8929"
 "checksum html5ever 0.22.3 (registry+https://github.com/rust-lang/crates.io-index)" = "b04478cf718862650a0bf66acaf8f2f8c906fbc703f35c916c1f4211b069a364"
 "checksum http 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)" = "dca621d0fa606a5ff2850b6e337b57ad6137ee4d67e940449643ff45af6874c6"
 "checksum httparse 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7b6288d7db100340ca12873fd4d08ad1b8f206a9457798dfb17c018a33fee540"
