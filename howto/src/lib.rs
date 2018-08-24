@@ -3,40 +3,39 @@ extern crate failure;
 extern crate lazy_static;
 extern crate futures;
 extern crate hyper;
+extern crate hyper_tls;
 extern crate scraper;
 extern crate slugify;
+extern crate tokio;
 
 pub use failure::Error;
 
+use futures::future::ok;
 use futures::stream::futures_ordered;
 use futures::{Future, Stream};
 use hyper::{Body, Client, Request};
+use hyper_tls::HttpsConnector;
 use scraper::{Html, Selector};
 use slugify::slugify;
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
 
 #[derive(Debug, Clone)]
 pub struct Answer {
     pub link: String,
     pub full_text: String,
-    pub instruction: Option<String>,
+    pub instruction: String,
 }
 
 pub struct Answers {
-    inner_stream: Box<Stream<Item = Answer, Error = Error>>,
+    inner: Receiver<Result<Answer, Error>>,
 }
 
-impl Answers {
-    pub fn into_stream(self) -> impl Stream<Item = Answer, Error = Error> {
-        self.inner_stream
-    }
-}
-
-impl IntoIterator for Answers {
+impl Iterator for Answers {
     type Item = Result<Answer, Error>;
-    type IntoIter = futures::stream::Wait<Box<Stream<Item = Answer, Error = Error>>>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.inner_stream.wait()
+    fn next(&mut self) -> Option<Result<Answer, Error>> {
+        self.inner.recv().ok()
     }
 }
 
@@ -46,12 +45,15 @@ fn get(url: &str) -> impl Future<Item = String, Error = Error> {
             "User-Agent",
             "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100 101 Firefox/22.0",
         ).body(Body::empty())
-        .unwrap();
+        .expect("request construction failed");
 
-    let client = Client::new();
+    let connector = HttpsConnector::new(4).expect("TLS initialization failed");
 
-    client
-        .request(req)
+    let client = Client::builder().build(connector);
+
+    let resp_future = client.request(req);
+
+    resp_future
         .map(|resp| resp.into_body())
         .and_then(|body| {
             body.fold(vec![], |mut acc, chunk| -> Result<_, hyper::Error> {
@@ -68,21 +70,23 @@ fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error
     }
 
     let url = format!(
-        "http://www.google.com/search?q=site:stackoverflow.com%20{}",
+        "https://www.google.com/search?q=site:stackoverflow.com%20{}",
         query
     );
+    let query = query.to_string();
 
-    get(&url).map(|content| {
-        let html = Html::parse_document(&content);
+    get(&url)
+        .map(|content| {
+            let html = Html::parse_document(&content);
 
-        let links: Vec<_> = html
-            .select(&LINK_SELECTOR)
-            .filter_map(|e| e.value().attr("href"))
-            .map(ToString::to_string)
-            .collect();
+            let links: Vec<_> = html
+                .select(&LINK_SELECTOR)
+                .filter_map(|e| e.value().attr("href"))
+                .map(ToString::to_string)
+                .collect();
 
-        links
-    })
+            links
+        }).map_err(move |e| e.context(format!("error in query {}", query)).into())
 }
 
 fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
@@ -95,33 +99,37 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
 
     let url = format!("{}?answerstab=votes", link);
     let link = link.to_string();
+    let link1 = link.clone();
 
     get(&url)
         .map(|content| Html::parse_document(&content))
         .map(|html| {
-            html.select(&ANSWER_SELECTOR).next().map(|answer| {
-                let instruction = answer
+            html.select(&ANSWER_SELECTOR).next().and_then(|answer| {
+                answer
                     .select(&PRE_INSTRUCTION_SELECTOR)
                     .next()
                     .or_else(|| answer.select(&CODE_INSTRUCTION_SELECTOR).next())
-                    .map(|e| e.text().collect::<Vec<_>>().join(""));
-                let full_text = answer
-                    .select(&TEXT_SELECTOR)
-                    .flat_map(|e| e.text())
-                    .collect::<Vec<_>>()
-                    .join("");
+                    .map(|e| e.text().collect::<Vec<_>>().join(""))
+                    .map(|instruction| {
+                        let full_text = answer
+                            .select(&TEXT_SELECTOR)
+                            .flat_map(|e| e.text())
+                            .collect::<Vec<_>>()
+                            .join("");
 
-                Answer {
-                    link,
-                    instruction,
-                    full_text,
-                }
+                        Answer {
+                            link,
+                            instruction,
+                            full_text,
+                        }
+                    })
             })
-        })
+        }).map_err(move |e| e.context(format!("error in link {}", link1)).into())
 }
 
 pub fn howto(query: &str) -> Answers {
     let query = slugify!(query, separator = "+");
+    let (sender, receiver) = channel::<Result<Answer, Error>>();
 
     let links_future = get_stackoverflow_links(&query);
 
@@ -130,7 +138,18 @@ pub fn howto(query: &str) -> Answers {
         .flatten_stream()
         .filter_map(|o| o);
 
-    Answers {
-        inner_stream: Box::new(answers_stream),
-    }
+    let answers_future = answers_stream
+        .map_err({
+            let sender = sender.clone();
+            move |e| sender.send(Err(e)).unwrap()
+        }).for_each(move |a| {
+            sender.send(Ok(a)).unwrap();
+            ok(())
+        });
+
+    thread::spawn(move || {
+        tokio::run(answers_future);
+    });
+
+    Answers { inner: receiver }
 }
