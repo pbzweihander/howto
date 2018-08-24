@@ -20,6 +20,7 @@ extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate scraper;
+#[macro_use]
 extern crate slugify;
 extern crate tokio;
 
