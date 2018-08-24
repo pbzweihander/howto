@@ -60,7 +60,6 @@ fn get_config_from_args(args: Vec<String>) -> Result<Config, String> {
 
     ensure!(matches.is_ok());
     let matches = matches.unwrap();
-    ensure!(!matches.free.is_empty());
     ensure!(!matches.opt_present("help"));
     if matches.opt_present("version") {
         return Err(VERSION.to_string());
@@ -75,6 +74,7 @@ fn get_config_from_args(args: Vec<String>) -> Result<Config, String> {
         };
     }
 
+    ensure!(!matches.free.is_empty());
     let query = matches.free.join(" ");
     ensure!(!query.is_empty());
 
@@ -119,7 +119,7 @@ fn main() {
                     println!("{}", answer.link);
                 } else {
                     if config.num_answers > 1 {
-                        println!("==== Answers from {} ====", answer.link);
+                        println!("==== Answer from {} ====", answer.link);
                     }
                     if config.show_full {
                         println!("{}\n", answer.full_text);
