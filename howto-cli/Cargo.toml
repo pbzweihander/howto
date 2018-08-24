@@ -10,6 +10,7 @@ keywords = ["cli", "search"]
 [dependencies]
 howto = "0.1"
 getopts = "0.2"
+openssl-probe = "0.1.2"
 
 [[bin]]
 name = "howto"

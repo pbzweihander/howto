@@ -1,5 +1,6 @@
 extern crate getopts;
 extern crate howto;
+extern crate openssl_probe;
 
 use getopts::Options;
 use howto::*;
@@ -97,6 +98,8 @@ fn get_config_from_args(args: Vec<String>) -> Result<Config, String> {
 }
 
 fn main() {
+    openssl_probe::init_ssl_cert_env_vars();
+
     let config = get_config_from_args(std::env::args().collect::<Vec<_>>());
     if let Err(e) = config {
         println!("{}", e);
@@ -110,7 +113,7 @@ fn main() {
         .skip(config.position - 1)
         .take(config.num_answers)
         .for_each(|answer| match answer {
-            Err(e) => eprintln!("{}", e),
+            Err(e) => eprintln!("{}\n{}", e, e.find_root_cause()),
             Ok(answer) => {
                 if config.show_link {
                     println!("{}", answer.link);
