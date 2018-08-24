@@ -1,7 +1,9 @@
 # howto
 
-<!--- [![circleci](https://circleci.com/gh/pbzweihander/howto.svg?style=shield)](https://circleci.com/gh/pbzweihander/howto) --->
-<!--- [![crate.io](https://img.shields.io/crates/v/howto.svg)](https://crates.io/crates/howto) --->
+[![circleci](https://circleci.com/gh/pbzweihander/howto.svg?style=shield)](https://circleci.com/gh/pbzweihander/howto)
+[![lib crate.io](https://img.shields.io/crates/v/howto.svg)](https://crates.io/crates/howto)
+[![lib docs.rs](https://docs.rs/howto/badge.svg)](https://docs.rs/howto)
+[![bin crate.io](https://img.shields.io/crates/v/howto-cli.svg)](https://crates.io/crates/howto-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Get instant coding answers via the command line. Inspired by [gleitz/howdoi](https://github.com/gleitz/howdoi)
