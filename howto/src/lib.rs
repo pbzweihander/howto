@@ -20,9 +20,8 @@ extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate scraper;
-#[macro_use]
-extern crate slugify;
 extern crate tokio;
+extern crate url;
 
 pub use failure::Error;
 
@@ -32,9 +31,9 @@ use futures::{Future, Stream};
 use hyper::{Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use scraper::{Html, Selector};
-use slugify::slugify;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
+use url::form_urlencoded::byte_serialize;
 
 /// Struct containing the answer of given query.
 #[derive(Debug, Clone)]
@@ -147,7 +146,7 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
 
 /// Query function. Give query to this fuction ans thats it. Google and StackOverflow do the rest.
 pub fn howto(query: &str) -> Answers {
-    let query = slugify!(query, separator = "+");
+    let query: String = byte_serialize(query.as_bytes()).collect();
     let (sender, receiver) = channel::<Result<Answer, Error>>();
 
     let links_future = get_stackoverflow_links(&query);
@@ -174,7 +173,27 @@ pub fn howto(query: &str) -> Answers {
 }
 
 #[test]
-fn simple_test() {
+fn simple_test_csharp() {
+    let answers = howto("file io C#");
+
+    for answer in answers {
+        let answer = answer.unwrap();
+        println!("Answer from: {}\n{}", answer.link, answer.instruction);
+    }
+}
+
+#[test]
+fn simple_test_cpp() {
+    let answers = howto("file io C++");
+
+    for answer in answers {
+        let answer = answer.unwrap();
+        println!("Answer from: {}\n{}", answer.link, answer.instruction);
+    }
+}
+
+#[test]
+fn simple_test_rust() {
     let answers = howto("file io rust");
 
     for answer in answers {

@@ -1,6 +1,6 @@
 [package]
 name = "howto"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["pbzweihander <sd852456@naver.com>"]
 license = "MIT"
 description = "instant coding answers via the command line"
@@ -15,4 +15,4 @@ hyper = "0.12"
 hyper-tls = "0.3"
 futures = "0.1"
 tokio = "0.1"
-slugify = "0.1"
+url = "1.7"
