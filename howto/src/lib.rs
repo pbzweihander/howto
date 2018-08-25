@@ -159,9 +159,11 @@ pub fn howto(query: &str) -> Answers {
     let answers_future = answers_stream
         .map_err({
             let sender = sender.clone();
-            move |e| sender.send(Err(e)).unwrap()
+            move |e| {
+                let _ = sender.send(Err(e));
+            }
         }).for_each(move |a| {
-            sender.send(Ok(a)).unwrap();
+            let _ = sender.send(Ok(a));
             ok(())
         });
 
@@ -173,7 +175,7 @@ pub fn howto(query: &str) -> Answers {
 }
 
 #[test]
-fn simple_test_csharp() {
+fn csharp_test() {
     let answers = howto("file io C#");
 
     for answer in answers {
@@ -183,7 +185,7 @@ fn simple_test_csharp() {
 }
 
 #[test]
-fn simple_test_cpp() {
+fn cpp_test() {
     let answers = howto("file io C++");
 
     for answer in answers {
@@ -193,11 +195,22 @@ fn simple_test_cpp() {
 }
 
 #[test]
-fn simple_test_rust() {
+fn rust_test() {
     let answers = howto("file io rust");
 
     for answer in answers {
         let answer = answer.unwrap();
         println!("Answer from: {}\n{}", answer.link, answer.instruction);
     }
+}
+
+#[test]
+fn drop_test() {
+    let mut answers = howto("file io rust");
+
+    let answer = answers.next().unwrap().unwrap();
+    println!("Answer from: {}\n{}", answer.link, answer.instruction);
+    drop(answers);
+
+    thread::sleep(std::time::Duration::from_secs(5));
 }

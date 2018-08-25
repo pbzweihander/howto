@@ -1,6 +1,6 @@
 [package]
 name = "howto"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["pbzweihander <sd852456@naver.com>"]
 license = "MIT"
 description = "instant coding answers via the command line"
