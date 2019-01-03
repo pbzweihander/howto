@@ -6,34 +6,24 @@
 //! ## Usage
 //!
 //! ```
-//! let answers = howto::howto("file io rust");
+//! # use futures::prelude::*;
+//! let answers = howto::howto("file io rust").wait();
 //!
 //! for answer in answers.filter_map(Result::ok) {
 //!     println!("Answer from {}\n{}", answer.link, answer.instruction);
 //! }
 //! ```
 
-extern crate failure;
-#[macro_use]
-extern crate lazy_static;
-extern crate futures;
-extern crate hyper;
-extern crate hyper_tls;
-extern crate scraper;
-extern crate tokio;
-extern crate url;
-
 pub use failure::Error;
 
-use futures::future::ok;
-use futures::stream::futures_ordered;
-use futures::{Future, Stream};
-use hyper::{Body, Client, Request};
-use hyper_tls::HttpsConnector;
-use scraper::{Html, Selector};
-use std::sync::mpsc::{channel, Receiver};
-use std::thread;
-use url::form_urlencoded::byte_serialize;
+use {
+    futures::prelude::*,
+    lazy_static::lazy_static,
+    reqwest::r#async::Client,
+    scraper::{Html, Selector},
+    std::thread,
+    tokio,
+};
 
 /// Struct containing the answer of given query.
 #[derive(Debug, Clone)]
@@ -43,42 +33,22 @@ pub struct Answer {
     pub instruction: String,
 }
 
-/// Blocking iterator that gets answers from Stream.
-pub struct Answers {
-    inner: Receiver<Result<Answer, Error>>,
-}
-
-impl Iterator for Answers {
-    type Item = Result<Answer, Error>;
-
-    fn next(&mut self) -> Option<Result<Answer, Error>> {
-        self.inner.recv().ok()
-    }
-}
-
 fn get(url: &str) -> impl Future<Item = String, Error = Error> {
-    let req = Request::get(url)
+    let client = Client::new();
+    let resp_future = client
+        .get(url)
         .header(
             "User-Agent",
             "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100 101 Firefox/22.0",
-        ).body(Body::empty())
-        .expect("request construction failed");
+        )
+        .send();
 
-    let connector = HttpsConnector::new(4).expect("TLS initialization failed");
-
-    let client = Client::builder().build(connector);
-
-    let resp_future = client.request(req);
-
-    resp_future
-        .map(|resp| resp.into_body())
-        .and_then(|body| {
-            body.fold(vec![], |mut acc, chunk| -> Result<_, hyper::Error> {
-                acc.extend_from_slice(&chunk);
-                Ok(acc)
-            })
-        }).map_err(Into::<Error>::into)
-        .and_then(|v| String::from_utf8(v).map_err(Into::<Error>::into))
+    resp_future.map_err(Into::into).and_then(|resp| {
+        resp.into_body().concat2().map_err(Into::into).map(|chunk| {
+            let v = chunk.to_vec();
+            String::from_utf8_lossy(&v).to_string()
+        })
+    })
 }
 
 fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error = Error> {
@@ -103,7 +73,8 @@ fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error
                 .collect();
 
             links
-        }).map_err(move |e| e.context(format!("error in query {}", query)).into())
+        })
+        .map_err(move |e| e.context(format!("error in query {}", query)).into())
 }
 
 fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
@@ -141,15 +112,17 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
                         }
                     })
             })
-        }).map_err(move |e| e.context(format!("error in link {}", link1)).into())
+        })
+        .map_err(move |e| e.context(format!("error in link {}", link1)).into())
 }
 
-/// Query function. Give query to this fuction ans thats it. Google and StackOverflow do the rest.
-pub fn howto(query: &str) -> Answers {
-    let query: String = byte_serialize(query.as_bytes()).collect();
-    let (sender, receiver) = channel::<Result<Answer, Error>>();
+/// Query function. Give query to this function and thats it! Google and StackOverflow will do the rest.
+pub fn howto(query: &str) -> impl Stream<Item = Answer, Error = Error> {
+    use futures::{future::ok, stream::futures_ordered, sync::mpsc::channel};
 
-    let links_future = get_stackoverflow_links(&query);
+    let (sender, receiver) = channel::<Result<Answer, Error>>(8);
+
+    let links_future = get_stackoverflow_links(query);
 
     let answers_stream = links_future
         .map(|v| futures_ordered(v.into_iter().map(|link| get_answer(&link))))
@@ -157,26 +130,20 @@ pub fn howto(query: &str) -> Answers {
         .filter_map(|o| o);
 
     let answers_future = answers_stream
-        .map_err({
-            let sender = sender.clone();
-            move |e| {
-                let _ = sender.send(Err(e));
-            }
-        }).for_each(move |a| {
-            let _ = sender.send(Ok(a));
-            ok(())
-        });
+        .then(ok::<_, Error>)
+        .forward(sender)
+        .then(|_| ok(()));
 
     thread::spawn(move || {
         tokio::run(answers_future);
     });
 
-    Answers { inner: receiver }
+    receiver.map_err(|_| unreachable!()).and_then(|r| r)
 }
 
 #[test]
 fn csharp_test() {
-    let answers = howto("file io C#");
+    let answers = howto("file io C#").wait();
 
     for answer in answers {
         let answer = answer.unwrap();
@@ -186,7 +153,7 @@ fn csharp_test() {
 
 #[test]
 fn cpp_test() {
-    let answers = howto("file io C++");
+    let answers = howto("file io C++").wait();
 
     for answer in answers {
         let answer = answer.unwrap();
@@ -196,7 +163,7 @@ fn cpp_test() {
 
 #[test]
 fn rust_test() {
-    let answers = howto("file io rust");
+    let answers = howto("file io rust").wait();
 
     for answer in answers {
         let answer = answer.unwrap();
@@ -206,7 +173,7 @@ fn rust_test() {
 
 #[test]
 fn drop_test() {
-    let mut answers = howto("file io rust");
+    let mut answers = howto("file io rust").wait();
 
     let answer = answers.next().unwrap().unwrap();
     println!("Answer from: {}\n{}", answer.link, answer.instruction);
