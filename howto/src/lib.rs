@@ -151,43 +151,69 @@ pub fn howto(query: &str) -> impl Stream<Item = Answer, Error = Error> {
     receiver.map_err(|_| unreachable!()).and_then(|r| r)
 }
 
-#[test]
-fn csharp_test() {
-    let answers = howto("file io C#").wait();
+#[cfg(test)]
+mod test {
+    use {crate::howto, futures::prelude::*, std::thread};
 
-    for answer in answers {
-        let answer = answer.unwrap();
-        println!("Answer from: {}\n{}", answer.link, answer.instruction);
+    #[test]
+    fn csharp_test() {
+        let answers = howto("file io C#").wait();
+
+        let mut is_answer_exists = false;
+        for answer in answers {
+            is_answer_exists = true;
+            let answer = answer.unwrap();
+            println!(
+                "Answer from: {} ({})\n{}",
+                answer.question_title, answer.link, answer.instruction
+            );
+        }
+        assert!(is_answer_exists);
     }
-}
 
-#[test]
-fn cpp_test() {
-    let answers = howto("file io C++").wait();
+    #[test]
+    fn cpp_test() {
+        let answers = howto("file io C++").wait();
 
-    for answer in answers {
-        let answer = answer.unwrap();
-        println!("Answer from: {}\n{}", answer.link, answer.instruction);
+        let mut is_answer_exists = false;
+        for answer in answers {
+            is_answer_exists = true;
+            let answer = answer.unwrap();
+            println!(
+                "Answer from: {} ({})\n{}",
+                answer.question_title, answer.link, answer.instruction
+            );
+        }
+        assert!(is_answer_exists);
     }
-}
 
-#[test]
-fn rust_test() {
-    let answers = howto("file io rust").wait();
+    #[test]
+    fn rust_test() {
+        let answers = howto("file io rust").wait();
 
-    for answer in answers {
-        let answer = answer.unwrap();
-        println!("Answer from: {}\n{}", answer.link, answer.instruction);
+        let mut is_answer_exists = false;
+        for answer in answers {
+            is_answer_exists = true;
+            let answer = answer.unwrap();
+            println!(
+                "Answer from: {} ({})\n{}",
+                answer.question_title, answer.link, answer.instruction
+            );
+        }
+        assert!(is_answer_exists);
     }
-}
 
-#[test]
-fn drop_test() {
-    let mut answers = howto("file io rust").wait();
+    #[test]
+    fn drop_test() {
+        let mut answers = howto("file io rust").wait();
 
-    let answer = answers.next().unwrap().unwrap();
-    println!("Answer from: {}\n{}", answer.link, answer.instruction);
-    drop(answers);
+        let answer = answers.next().unwrap().unwrap();
+        println!(
+            "Answer from: {} ({})\n{}",
+            answer.question_title, answer.link, answer.instruction
+        );
+        drop(answers);
 
-    thread::sleep(std::time::Duration::from_secs(5));
+        thread::sleep(std::time::Duration::from_secs(5));
+    }
 }
