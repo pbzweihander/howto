@@ -27,6 +27,7 @@ use {
 /// Struct containing the answer of given query.
 #[derive(Debug, Clone)]
 pub struct Answer {
+    pub question_title: String,
     pub link: String,
     pub full_text: String,
     pub instruction: String,
@@ -56,8 +57,8 @@ fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error
     }
 
     let url = format!(
-        "https://www.google.com/search?q=site:stackoverflow.com%20{}",
-        query
+        "https://www.google.com/search?q=site:stackoverflow.com {}",
+        query,
     );
     let query = query.to_string();
 
@@ -78,6 +79,7 @@ fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error
 
 fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
     lazy_static! {
+        static ref TITLE_SELECTOR: Selector = Selector::parse("#question-header>h1").unwrap();
         static ref ANSWER_SELECTOR: Selector = Selector::parse(".answer").unwrap();
         static ref TEXT_SELECTOR: Selector = Selector::parse(".post-text>*").unwrap();
         static ref PRE_INSTRUCTION_SELECTOR: Selector = Selector::parse("pre").unwrap();
@@ -91,7 +93,11 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
     get(&url)
         .map(|content| Html::parse_document(&content))
         .map(|html| {
-            html.select(&ANSWER_SELECTOR).next().and_then(|answer| {
+            let title = html
+                .select(&TITLE_SELECTOR)
+                .next()
+                .map(|title| title.text().collect::<Vec<_>>().join(""));
+            let rest = html.select(&ANSWER_SELECTOR).next().and_then(|answer| {
                 answer
                     .select(&PRE_INSTRUCTION_SELECTOR)
                     .next()
@@ -104,12 +110,17 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
                             .collect::<Vec<_>>()
                             .join("");
 
-                        Answer {
-                            link,
-                            instruction,
-                            full_text,
-                        }
+                        (link, instruction, full_text)
                     })
+            });
+
+            title.and_then(|question_title| {
+                rest.map(|(link, instruction, full_text)| Answer {
+                    question_title,
+                    link,
+                    instruction,
+                    full_text,
+                })
             })
         })
         .map_err(move |e| e.context(format!("error in link {}", link1)).into())
