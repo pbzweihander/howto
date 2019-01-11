@@ -70,6 +70,7 @@ fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error
                 .select(&LINK_SELECTOR)
                 .filter_map(|e| e.value().attr("href"))
                 .map(ToString::to_string)
+                .filter(|link| link.starts_with("https://stackoverflow.com/"))
                 .collect();
 
             links
