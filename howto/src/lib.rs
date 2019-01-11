@@ -14,9 +14,8 @@
 //! }
 //! ```
 
-pub use failure::Error;
-
 use {
+    failure::Error,
     futures::prelude::*,
     lazy_static::lazy_static,
     reqwest::r#async::Client,
