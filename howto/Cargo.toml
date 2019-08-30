@@ -1,6 +1,6 @@
 [package]
 name = "howto"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["pbzweihander <pbzweihander@gmail.com>"]
 license = "MIT"
 description = "instant coding answers via the command line"
@@ -9,9 +9,10 @@ keywords = ["cli", "search"]
 edition = "2018"
 
 [dependencies]
-scraper = "0.9.0"
+# rustc 1.39.0-nightly (9eae1fc0e 2019-08-23)
+
 failure = "0.1.5"
-lazy_static = "1.2.0"
-futures = "0.1.25"
-tokio = "0.1.14"
-reqwest = "0.9.7"
+futures-preview = "0.3.0-alpha.18"
+lazy_static = "1.4.0"
+scraper = "0.10.1"
+surf = "1.0.2"

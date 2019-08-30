@@ -13,20 +13,10 @@ Get instant coding answers via the command line. Inspired by [gleitz/howdoi](htt
 ### Usage
 
 ```rust
-extern crate howto;
+let answers = howto(&query).await;
+let answer = answers.next().await.unwrap();
 
-use howto::howto;
-use std::env;
-
-fn main() {
-    let query = env::args().skip(1).collect::<Vec<_>>().join(" ");
-
-    let answers = howto(&query);
-
-    for answer in answers.filter_map(Result::ok) {
-        println("{}", answer.instruction);
-    }
-}
+println("{}", answer.instruction);
 ```
 
 ## The CLI

@@ -7,21 +7,26 @@
 //!
 //! ```
 //! # use futures::prelude::*;
-//! let answers = howto::howto("file io rust").wait();
+//! # async move {
+//! let answers = howto::howto("file io rust").await;
 //!
-//! for answer in answers.filter_map(Result::ok) {
+//! answers.for_each(|answer| {
 //!     println!("Answer from {}\n{}", answer.link, answer.instruction);
-//! }
+//!     future::ready(())
+//! }).await;
+//! # };
 //! ```
 
+#![feature(async_closure, try_blocks)]
+
+#[cfg(test)]
+mod tests;
+
 use {
-    failure::Error,
+    failure::{ensure, format_err, Fallible},
     futures::prelude::*,
     lazy_static::lazy_static,
-    reqwest::r#async::Client,
     scraper::{Html, Selector},
-    std::thread,
-    tokio,
 };
 
 /// Struct containing the answer of given query.
@@ -33,25 +38,27 @@ pub struct Answer {
     pub instruction: String,
 }
 
-fn get(url: &str) -> impl Future<Item = String, Error = Error> {
-    let client = Client::new();
-    let resp_future = client
-        .get(url)
-        .header(
+async fn get(url: &str) -> Fallible<String> {
+    let mut resp = surf::get(url)
+        .set_header(
             "User-Agent",
             "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100 101 Firefox/22.0",
         )
-        .send();
+        .await
+        .map_err(|e| failure::Error::from_boxed_compat(e))?;
 
-    resp_future.map_err(Into::into).and_then(|resp| {
-        resp.into_body().concat2().map_err(Into::into).map(|chunk| {
-            let v = chunk.to_vec();
-            String::from_utf8_lossy(&v).to_string()
-        })
-    })
+    ensure!(
+        resp.status().is_success(),
+        format_err!("Request error: {}", resp.status())
+    );
+
+    Ok(resp
+        .body_string()
+        .await
+        .map_err(|e| failure::Error::from_boxed_compat(e))?)
 }
 
-fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error = Error> {
+async fn get_stackoverflow_links(query: &str) -> Fallible<Vec<String>> {
     lazy_static! {
         static ref LINK_SELECTOR: Selector = Selector::parse(".r>a").unwrap();
     }
@@ -60,25 +67,21 @@ fn get_stackoverflow_links(query: &str) -> impl Future<Item = Vec<String>, Error
         "https://www.google.com/search?q=site:stackoverflow.com {}",
         query,
     );
-    let query = query.to_string();
 
-    get(&url)
-        .map(|content| {
-            let html = Html::parse_document(&content);
+    let content = get(&url).await?;
+    let html = Html::parse_document(&content);
 
-            let links: Vec<_> = html
-                .select(&LINK_SELECTOR)
-                .filter_map(|e| e.value().attr("href"))
-                .map(ToString::to_string)
-                .filter(|link| link.starts_with("https://stackoverflow.com/"))
-                .collect();
+    let links: Vec<_> = html
+        .select(&LINK_SELECTOR)
+        .filter_map(|e| e.value().attr("href"))
+        .map(ToString::to_string)
+        .filter(|link| link.starts_with("https://stackoverflow.com/"))
+        .collect();
 
-            links
-        })
-        .map_err(move |e| e.context(format!("error in query {}", query)).into())
+    Ok(links)
 }
 
-fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
+async fn get_answer(link: &str) -> Fallible<Answer> {
     lazy_static! {
         static ref TITLE_SELECTOR: Selector = Selector::parse("#question-header>h1").unwrap();
         static ref ANSWER_SELECTOR: Selector = Selector::parse(".answer").unwrap();
@@ -86,135 +89,55 @@ fn get_answer(link: &str) -> impl Future<Item = Option<Answer>, Error = Error> {
         static ref PRE_INSTRUCTION_SELECTOR: Selector = Selector::parse("pre").unwrap();
         static ref CODE_INSTRUCTION_SELECTOR: Selector = Selector::parse("code").unwrap();
     }
+    macro_rules! unwrap_or_bail {
+        ($o:expr) => {
+            $o.ok_or_else(|| format_err!("Cannot parse StackOverflow"))?
+        };
+    };
 
     let url = format!("{}?answerstab=votes", link);
     let link = link.to_string();
-    let link1 = link.clone();
 
-    get(&url)
-        .map(|content| Html::parse_document(&content))
-        .map(|html| {
-            let title = html
-                .select(&TITLE_SELECTOR)
-                .next()
-                .map(|title| title.text().collect::<Vec<_>>().join(""));
-            let rest = html.select(&ANSWER_SELECTOR).next().and_then(|answer| {
-                answer
-                    .select(&PRE_INSTRUCTION_SELECTOR)
-                    .next()
-                    .or_else(|| answer.select(&CODE_INSTRUCTION_SELECTOR).next())
-                    .map(|e| e.text().collect::<Vec<_>>().join(""))
-                    .map(|instruction| {
-                        let full_text = answer
-                            .select(&TEXT_SELECTOR)
-                            .flat_map(|e| e.text())
-                            .collect::<Vec<_>>()
-                            .join("");
+    let content = get(&url).await?;
+    let html = Html::parse_document(&content);
 
-                        (link, instruction, full_text)
-                    })
-            });
+    let title_html = unwrap_or_bail!(html.select(&TITLE_SELECTOR).next());
+    let question_title = title_html.text().collect::<Vec<_>>().join("");
 
-            title.and_then(|question_title| {
-                rest.map(|(link, instruction, full_text)| Answer {
-                    question_title,
-                    link,
-                    instruction,
-                    full_text,
-                })
-            })
-        })
-        .map_err(move |e| e.context(format!("error in link {}", link1)).into())
+    let answer = unwrap_or_bail!(html.select(&ANSWER_SELECTOR).next());
+
+    let instruction_html = unwrap_or_bail!(answer
+        .select(&PRE_INSTRUCTION_SELECTOR)
+        .next()
+        .or_else(|| answer.select(&CODE_INSTRUCTION_SELECTOR).next()));
+    let instruction = instruction_html.text().collect::<Vec<_>>().join("");
+    let full_text = answer
+        .select(&TEXT_SELECTOR)
+        .flat_map(|e| e.text())
+        .collect::<Vec<_>>()
+        .join("");
+
+    Ok(Answer {
+        question_title,
+        link,
+        instruction,
+        full_text,
+    })
 }
 
 /// Query function. Give query to this function and thats it! Google and StackOverflow will do the rest.
-pub fn howto(query: &str) -> impl Stream<Item = Answer, Error = Error> {
-    use futures::{future::ok, stream::futures_ordered, sync::mpsc::channel};
+pub async fn howto(query: &str) -> stream::BoxStream<'_, Answer> {
+    let links = get_stackoverflow_links(query).await.unwrap_or_default();
 
-    let (sender, receiver) = channel::<Result<Answer, Error>>(8);
-
-    let links_future = get_stackoverflow_links(query);
-
-    let answers_stream = links_future
-        .map(|v| futures_ordered(v.into_iter().map(|link| get_answer(&link))))
-        .flatten_stream()
-        .filter_map(|o| o);
-
-    let answers_future = answers_stream
-        .then(ok::<_, Error>)
-        .forward(sender)
-        .then(|_| ok(()));
-
-    thread::spawn(move || {
-        tokio::run(answers_future);
-    });
-
-    receiver.map_err(|_| unreachable!()).and_then(|r| r)
-}
-
-#[cfg(test)]
-mod test {
-    use {crate::howto, futures::prelude::*, std::thread};
-
-    #[test]
-    fn csharp_test() {
-        let answers = howto("file io C#").wait();
-
-        let mut is_answer_exists = false;
-        for answer in answers {
-            is_answer_exists = true;
-            let answer = answer.unwrap();
-            println!(
-                "Answer from: {} ({})\n{}",
-                answer.question_title, answer.link, answer.instruction
-            );
+    stream::unfold(links, async move |mut links| {
+        if links.is_empty() {
+            None
+        } else {
+            let link = links.remove(0);
+            let answer = get_answer(&link).await;
+            Some((answer.ok(), links))
         }
-        assert!(is_answer_exists);
-    }
-
-    #[test]
-    fn cpp_test() {
-        let answers = howto("file io C++").wait();
-
-        let mut is_answer_exists = false;
-        for answer in answers {
-            is_answer_exists = true;
-            let answer = answer.unwrap();
-            println!(
-                "Answer from: {} ({})\n{}",
-                answer.question_title, answer.link, answer.instruction
-            );
-        }
-        assert!(is_answer_exists);
-    }
-
-    #[test]
-    fn rust_test() {
-        let answers = howto("file io rust").wait();
-
-        let mut is_answer_exists = false;
-        for answer in answers {
-            is_answer_exists = true;
-            let answer = answer.unwrap();
-            println!(
-                "Answer from: {} ({})\n{}",
-                answer.question_title, answer.link, answer.instruction
-            );
-        }
-        assert!(is_answer_exists);
-    }
-
-    #[test]
-    fn drop_test() {
-        let mut answers = howto("file io rust").wait();
-
-        let answer = answers.next().unwrap().unwrap();
-        println!(
-            "Answer from: {} ({})\n{}",
-            answer.question_title, answer.link, answer.instruction
-        );
-        drop(answers);
-
-        thread::sleep(std::time::Duration::from_secs(5));
-    }
+    })
+    .filter_map(future::ready)
+    .boxed()
 }
