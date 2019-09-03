@@ -49,16 +49,21 @@ howto QUERY
 ### Usage
 
 ```
-Usage: target/debug/howto QUERY [options]
+howto-cli 0.3.0
 
-    QUERY               the question to answer
+USAGE:
+    howto-cli [FLAGS] [OPTIONS] [query]...
 
-Options:
-    -h, --help          print this help message
-    -p, --pos POS       select answer in specified position (default: 1)
-    -a, --all           display the full text of the answer
-    -l, --link          display only the answer link
-    -n, --num-answers NUM_ANSWERS
-                        number of answers to return (default: 1)
-    -v, --version       print the current version
+FLAGS:
+    -h, --help       Prints help information
+    -f, --full       Whether display the full text of the answer
+    -l, --link       Whether display only the answer link
+    -V, --version    Prints version information
+
+OPTIONS:
+    -n, --num-answers <num-answers>    Number of answers to return [default: 1]
+    -p, --position <position>          Select answer in specified position [default: 0]
+
+ARGS:
+    <query>...    
 ```

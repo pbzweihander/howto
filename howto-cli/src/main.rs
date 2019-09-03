@@ -1,138 +1,64 @@
-use {futures::prelude::*, getopts::Options, howto::*, openssl_probe, std::env, tokio};
+use {futures::prelude::*, howto::*, std::convert::TryInto, structopt::StructOpt};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-#[derive(Debug)]
-struct Config {
-    query: String,
+#[derive(Debug, StructOpt)]
+struct Opt {
+    /// Select answer in specified position
+    #[structopt(short, long, default_value = "0", parse(try_from_str))]
     position: u64,
+    /// Whether display only the answer link
+    #[structopt(short = "l", long = "link")]
     show_link: bool,
+    /// Whether display the full text of the answer
+    #[structopt(short = "f", long = "full")]
     show_full: bool,
+    /// Number of answers to return
+    #[structopt(
+        short = "n",
+        long = "num-answers",
+        default_value = "1",
+        parse(try_from_str)
+    )]
     num_answers: u64,
+    query: Vec<String>,
 }
 
-fn help_message(program: &str, opts: &Options) -> String {
-    let brief = format!(
-        "Usage: {} QUERY [options]\n\n    QUERY               the question to answer",
-        program
-    );
-    opts.usage(&brief)
-}
+async fn async_main(mut opt: Opt) {
+    let query = std::mem::replace(&mut opt.query, vec![]);
+    let query = query.join(" ");
 
-fn get_config_from_args(args: &[String]) -> Result<Config, String> {
-    let mut opts = Options::new();
-    let program = args[0].clone();
-
-    opts.optflag("h", "help", "print this help message")
-        .optopt(
-            "p",
-            "pos",
-            "select answer in specified position (default: 1)",
-            "POS",
-        )
-        .optflag("a", "all", "display the full text of the answer")
-        .optflag("l", "link", "display only the answer link")
-        .optopt(
-            "n",
-            "num-answers",
-            "number of answers to return (default: 1)",
-            "NUM_ANSWERS",
-        )
-        .optflag("v", "version", "print the current version");
-
-    macro_rules! bail {
-        () => {
-            return Err(help_message(&program, &opts));
-        };
+    if opt.position > 0 || opt.num_answers > 1 {
+        prefetch_howto(&query, (opt.position + opt.num_answers).try_into().unwrap())
+            .await
+            .left_stream()
+    } else {
+        howto(&query).await.right_stream()
     }
-    macro_rules! ensure {
-        ($b:expr) => {
-            if !$b {
-                bail!();
+    .skip(opt.position)
+    .take(opt.num_answers)
+    .for_each(move |answer| {
+        if opt.show_link {
+            println!("{}", answer.link);
+        } else {
+            if opt.num_answers > 1 {
+                println!("==== Answer from {} ====", answer.link);
             }
-        };
-    }
-
-    let matches = opts.parse(&args[1..]);
-
-    ensure!(matches.is_ok());
-    let matches = matches.unwrap();
-    ensure!(!matches.opt_present("help"));
-    if matches.opt_present("version") {
-        return Err(VERSION.to_string());
-    }
-
-    macro_rules! get_opt_or_default {
-        ($n:expr, $d:expr) => {
-            match matches.opt_get($n) {
-                Ok(o) => o.unwrap_or($d),
-                Err(_) => bail!(),
-            };
-        };
-    }
-
-    ensure!(!matches.free.is_empty());
-    let query = matches.free.join(" ");
-    ensure!(!query.is_empty());
-
-    let position = get_opt_or_default!("pos", 1);
-    ensure!(position >= 1);
-
-    let num_answers = get_opt_or_default!("num-answers", 1);
-    ensure!(num_answers >= 1);
-
-    let show_link = matches.opt_present("link");
-    let show_full = matches.opt_present("all");
-    ensure!(!(show_link && show_full));
-
-    Ok(Config {
-        query,
-        position,
-        show_link,
-        show_full,
-        num_answers,
+            if opt.show_full {
+                println!("{}\n", answer.full_text);
+            } else {
+                println!("{}", answer.instruction);
+            }
+        }
+        future::ready(())
     })
+    .await;
 }
 
 fn main() {
-    use futures::future::ok;
-
     openssl_probe::init_ssl_cert_env_vars();
 
-    let args = env::args().collect::<Vec<_>>();
-    let config = get_config_from_args(&args);
-    if let Err(e) = config {
-        println!("{}", e);
-        return;
-    }
-    let config = config.unwrap();
+    let opt = Opt::from_args();
 
-    let answers = howto(&config.query);
+    let fut = async_main(opt);
 
-    let fut = answers
-        .skip(config.position - 1)
-        .take(config.num_answers)
-        .then(ok)
-        .for_each(move |answer| {
-            match answer {
-                Err(e) => eprintln!("{}\n{}", e, e.find_root_cause()),
-                Ok(answer) => {
-                    if config.show_link {
-                        println!("{}", answer.link);
-                    } else {
-                        if config.num_answers > 1 {
-                            println!("==== Answer from {} ====", answer.link);
-                        }
-                        if config.show_full {
-                            println!("{}\n", answer.full_text);
-                        } else {
-                            println!("{}", answer.instruction);
-                        }
-                    }
-                }
-            };
-            ok(())
-        });
-
-    tokio::run(fut);
+    futures::executor::block_on(fut);
 }

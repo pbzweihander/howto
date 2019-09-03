@@ -1,7 +1,7 @@
 [package]
 name = "howto-cli"
-version = "0.2.0"
-authors = ["pbzweihander <sd852456@naver.com>"]
+version = "0.3.0"
+authors = ["pbzweihander <pbzweihander@gmail.com>"]
 license = "MIT"
 description = "instant coding answers via the command line"
 repository = "https://github.com/pbzweihander/howto"
@@ -9,12 +9,9 @@ keywords = ["cli", "search"]
 edition = "2018"
 
 [dependencies]
-howto = "0.2.0"
-getopts = "0.2.18"
-openssl-probe = "0.1.2"
-futures = "0.1.25"
-tokio = "0.1.13"
+# rustc 1.39.0-nightly (9eae1fc0e 2019-08-23)
 
-[[bin]]
-name = "howto"
-path = "src/main.rs"
+futures-preview = "0.3.0-alpha.18"
+howto = { version = "0.3", path = "../howto" }
+openssl-probe = "0.1.2"
+structopt = "0.3.0"
