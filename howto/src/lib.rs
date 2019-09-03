@@ -129,15 +129,28 @@ async fn get_answer(link: &str) -> Fallible<Answer> {
 pub async fn howto(query: &str) -> stream::BoxStream<'_, Answer> {
     let links = get_stackoverflow_links(query).await.unwrap_or_default();
 
-    stream::unfold(links, async move |mut links| {
-        if links.is_empty() {
-            None
-        } else {
-            let link = links.remove(0);
-            let answer = get_answer(&link).await;
-            Some((answer.ok(), links))
-        }
-    })
-    .filter_map(future::ready)
-    .boxed()
+    stream::iter(links)
+        .filter_map(async move |link| get_answer(&link).await.ok())
+        .boxed()
+}
+
+/// Prefetch n queries with `FuturesOrdered`, and then others.
+pub async fn prefetch_howto(query: &str, n: usize) -> stream::BoxStream<'_, Answer> {
+    let mut links = get_stackoverflow_links(query).await.unwrap_or_default();
+
+    let others = if links.len() < n {
+        vec![]
+    } else {
+        links.split_off(n)
+    };
+
+    let prefetch_stream = links
+        .into_iter()
+        .map(async move |link| get_answer(&link).await.ok())
+        .collect::<stream::FuturesOrdered<_>>()
+        .filter_map(future::ready);
+    let others_stream =
+        stream::iter(others).filter_map(async move |link| get_answer(&link).await.ok());
+
+    prefetch_stream.chain(others_stream).boxed()
 }

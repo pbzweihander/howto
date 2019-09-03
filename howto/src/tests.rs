@@ -8,7 +8,10 @@ use {
 };
 
 fn print_answer(answer: &Answer) {
-    println!("Found answer {} from {}", answer.question_title, answer.link);
+    println!(
+        "Found answer {} from {}",
+        answer.question_title, answer.link,
+    );
     println!("{}", answer.instruction);
 }
 
