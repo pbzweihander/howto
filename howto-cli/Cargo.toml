@@ -9,9 +9,8 @@ keywords = ["cli", "search"]
 edition = "2018"
 
 [dependencies]
-# rustc 1.39.0-nightly (9eae1fc0e 2019-08-23)
-
-futures-preview = "0.3.0-alpha.18"
+futures-util = { version = "0.3" }
 howto = { version = "0.3", path = "../howto" }
 openssl-probe = "0.1.2"
 structopt = "0.3.0"
+tokio = { version = "0.2", features = ["macros", "rt-threaded"] }

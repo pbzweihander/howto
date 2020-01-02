@@ -1,4 +1,7 @@
-use {futures::prelude::*, howto::*, std::convert::TryInto, structopt::StructOpt};
+use futures_util::StreamExt;
+use howto::*;
+use std::convert::TryInto;
+use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
@@ -22,20 +25,26 @@ struct Opt {
     query: Vec<String>,
 }
 
-async fn async_main(mut opt: Opt) {
+#[tokio::main]
+async fn main() {
+    openssl_probe::init_ssl_cert_env_vars();
+
+    let mut opt = Opt::from_args();
+
     let query = std::mem::replace(&mut opt.query, vec![]);
     let query = query.join(" ");
 
-    if opt.position > 0 || opt.num_answers > 1 {
+    let mut answers = if opt.position > 0 || opt.num_answers > 1 {
         prefetch_howto(&query, (opt.position + opt.num_answers).try_into().unwrap())
             .await
             .left_stream()
     } else {
         howto(&query).await.right_stream()
     }
-    .skip(opt.position)
-    .take(opt.num_answers)
-    .for_each(move |answer| {
+    .skip(opt.position as usize)
+    .take(opt.num_answers as usize);
+
+    while let Some(answer) = answers.next().await {
         if opt.show_link {
             println!("{}", answer.link);
         } else {
@@ -48,17 +57,5 @@ async fn async_main(mut opt: Opt) {
                 println!("{}", answer.instruction);
             }
         }
-        future::ready(())
-    })
-    .await;
-}
-
-fn main() {
-    openssl_probe::init_ssl_cert_env_vars();
-
-    let opt = Opt::from_args();
-
-    let fut = async_main(opt);
-
-    futures::executor::block_on(fut);
+    }
 }
