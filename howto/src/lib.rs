@@ -8,26 +8,22 @@
 //! ```
 //! # use futures::prelude::*;
 //! # async move {
-//! let answers = howto::howto("file io rust").await;
+//! let mut answers = howto::howto("file io rust").await;
 //!
-//! answers.for_each(|answer| {
+//! while let Some(answer) = answers.next().await {
 //!     println!("Answer from {}\n{}", answer.link, answer.instruction);
-//!     future::ready(())
-//! }).await;
+//! }
 //! # };
 //! ```
-
-#![feature(async_closure, try_blocks)]
 
 #[cfg(test)]
 mod tests;
 
-use {
-    failure::{ensure, format_err, Fallible},
-    futures::prelude::*,
-    lazy_static::lazy_static,
-    scraper::{Html, Selector},
-};
+use failure::{ensure, format_err, Fallible};
+use futures::prelude::*;
+use lazy_static::lazy_static;
+use scraper::{Html, Selector};
+use std::pin::Pin;
 
 /// Struct containing the answer of given query.
 #[derive(Debug, Clone)]
@@ -39,13 +35,15 @@ pub struct Answer {
 }
 
 async fn get(url: &str) -> Fallible<String> {
-    let mut resp = surf::get(url)
-        .set_header(
+    let resp = reqwest::Client::new()
+        .get(url)
+        .header(
             "User-Agent",
             "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100 101 Firefox/22.0",
         )
+        .send()
         .await
-        .map_err(|e| failure::Error::from_boxed_compat(e))?;
+        .map_err(|e| failure::Error::from_boxed_compat(Box::new(e)))?;
 
     ensure!(
         resp.status().is_success(),
@@ -53,9 +51,9 @@ async fn get(url: &str) -> Fallible<String> {
     );
 
     Ok(resp
-        .body_string()
+        .text()
         .await
-        .map_err(|e| failure::Error::from_boxed_compat(e))?)
+        .map_err(|e| failure::Error::from_boxed_compat(Box::new(e)))?)
 }
 
 async fn get_stackoverflow_links(query: &str) -> Fallible<Vec<String>> {
@@ -126,16 +124,16 @@ async fn get_answer(link: &str) -> Fallible<Answer> {
 }
 
 /// Query function. Give query to this function and thats it! Google and StackOverflow will do the rest.
-pub async fn howto(query: &str) -> stream::BoxStream<'_, Answer> {
+pub async fn howto(query: &str) -> Pin<Box<dyn Stream<Item = Answer> + Send>> {
     let links = get_stackoverflow_links(query).await.unwrap_or_default();
 
     stream::iter(links)
-        .filter_map(async move |link| get_answer(&link).await.ok())
+        .filter_map(move |link| async move { get_answer(&link).await.ok() })
         .boxed()
 }
 
 /// Prefetch n queries with `FuturesOrdered`, and then others.
-pub async fn prefetch_howto(query: &str, n: usize) -> stream::BoxStream<'_, Answer> {
+pub async fn prefetch_howto(query: &str, n: usize) -> Pin<Box<dyn Stream<Item = Answer> + Send>> {
     let mut links = get_stackoverflow_links(query).await.unwrap_or_default();
 
     let others = if links.len() < n {
@@ -146,11 +144,11 @@ pub async fn prefetch_howto(query: &str, n: usize) -> stream::BoxStream<'_, Answ
 
     let prefetch_stream = links
         .into_iter()
-        .map(async move |link| get_answer(&link).await.ok())
+        .map(move |link| async move { get_answer(&link).await.ok() })
         .collect::<stream::FuturesOrdered<_>>()
         .filter_map(future::ready);
     let others_stream =
-        stream::iter(others).filter_map(async move |link| get_answer(&link).await.ok());
+        stream::iter(others).filter_map(move |link| async move { get_answer(&link).await.ok() });
 
     prefetch_stream.chain(others_stream).boxed()
 }

@@ -9,10 +9,11 @@ keywords = ["cli", "search"]
 edition = "2018"
 
 [dependencies]
-# rustc 1.39.0-nightly (9eae1fc0e 2019-08-23)
-
 failure = "0.1.5"
-futures-preview = "0.3.0-alpha.18"
+futures = "0.3"
 lazy_static = "1.4.0"
+reqwest = "0.10"
 scraper = "0.10.1"
-surf = "1.0.2"
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["full"] }
