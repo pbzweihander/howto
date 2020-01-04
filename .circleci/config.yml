@@ -1,4 +1,7 @@
-version: 2
+version: 2.1
+
+orbs:
+  docker: circleci/docker@0.5.20
 
 workflows:
   version: 2
@@ -6,18 +9,53 @@ workflows:
     jobs:
       - test
       - build
+      - lib_publish:
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - master
+      - bin_publish:
+          requires:
+            - lib_publish
+            - build
+          filters:
+            branches:
+              only:
+                - master
+      - docker/publish:
+          requires:
+            - build
+          filters:
+            branches:
+              only:
+                - master
+          image: pbzweihander/howto
+          tag: latest
+          path: howto-cli
+          before_build:
+            - attach_workspace:
+                at: target
+          after_build:
+            - run: |
+                docker tag \
+                  pbzweihander/howto:latest \
+                  pbzweihander/howto:$CIRCLE_SHA1
+            - docker/push:
+                image: pbzweihander/howto
 
 jobs:
   test:
     docker:
-      - image: clux/muslrust:stable-2019-12-21
+      - image: &image clux/muslrust:stable-2019-12-21
     working_directory: /volume
     steps:
       - checkout
       - restore_cache:
           keys:
           - &lib-cache-key lib-v1-{{ checksum "howto/Cargo.toml" }}
-          - lib-v1-
+          - &lib-cache-key-2 lib-v1-
       - run:
           command: cargo check --all-targets
       - run:
@@ -28,26 +66,63 @@ jobs:
             - /root/.cargo/registry
             - target/x86_64-unknown-linux-musl/debug/deps
             - target/x86_64-unknown-linux-musl/debug/build
+
   build:
     docker:
-      - image: clux/muslrust:stable-2019-12-21
+      - image: *image
     working_directory: /volume
     steps:
       - checkout
       - restore_cache:
           keys:
-          - &bin-cache-key bin-v1-{{ checksum "howto-cli/Cargo.lock" }}
-          - bin-v1-
+          - &bin-cache-key bin-v1-{{ checksum "Cargo.lock" }}
+          - &bin-cache-key-2 bin-v1-
       - run:
           command: cargo build --release
       - save_cache:
           key: *bin-cache-key
           paths:
             - /root/.cargo/registry
-            - target/x86_64-unknown-linux-musl/debug/deps
-            - target/x86_64-unknown-linux-musl/debug/build
-      - run: mv target/x86_64-unknown-linux-musl/release/howto-cli howto-cli/howto
+            - target/x86_64-unknown-linux-musl/release/deps
+            - target/x86_64-unknown-linux-musl/release/build
       - persist_to_workspace:
-          root: .
+          root: target/x86_64-unknown-linux-musl
           paths:
-            - howto-cli/howto
+            - release/howto-cli
+      - store_artifacts:
+          path: target/x86_64-unknown-linux-musl/release/howto-cli
+
+  lib_publish:
+    docker:
+      - image: *image
+    working_directory: /volume
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+          - *lib-cache-key
+          - *lib-cache-key-2
+      - run: &cargo-login
+          name: Cargo login
+          command: |
+            cargo login "$CARGO_TOKEN"
+      - run: &install-jq
+          name: Install jq
+          command: |
+            curl -sSL https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64 --output /usr/bin/jq
+            chmod +x /usr/bin/jq
+      - run: make lib-publish
+
+  bin_publish:
+    docker:
+      - image: *image
+    working_directory: /volume
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+          - *bin-cache-key
+          - *bin-cache-key-2
+      - run: *cargo-login
+      - run: *install-jq
+      - run: make bin-publish

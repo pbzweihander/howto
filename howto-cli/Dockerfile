@@ -1,6 +1,7 @@
 FROM alpine:latest
+
 RUN apk --no-cache add ca-certificates
 
-COPY howto /usr/bin/howto
+COPY target/release/howto-cli /usr/local/bin/howto
 
 ENTRYPOINT [ "howto" ]
