@@ -1,6 +1,6 @@
 [package]
 name = "howto-cli"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["pbzweihander <pbzweihander@gmail.com>"]
 license = "MIT"
 description = "instant coding answers via the command line"
@@ -10,7 +10,7 @@ edition = "2018"
 
 [dependencies]
 futures-util = { version = "0.3" }
-howto = { version = "0.3", path = "../howto" }
+howto = { version = "0.4", path = "../howto" }
 openssl-probe = "0.1.2"
 structopt = "0.3.0"
 tokio = { version = "0.2", features = ["macros", "rt-threaded"] }
