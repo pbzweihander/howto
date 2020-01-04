@@ -1,4 +1,6 @@
 /.git
 /target
+!/target/release/howto
+!/target/release/howto-cli
 **/*.rs.bk
 Makefile

@@ -36,7 +36,7 @@ workflows:
           path: howto-cli
           before_build:
             - attach_workspace:
-                at: target
+                at: howto-cli/target
           after_build:
             - run: |
                 docker tag \
